@@ -1,18 +1,56 @@
 export type App = { bundleID?: string; name?: string };
 
-export type Paths = { home: string; data: string };
+export type Paths = { data: string };
+
+export type Schema =
+  | { type: "string"; description?: string; enum?: readonly string[] }
+  | { type: "number" | "integer" | "boolean"; description?: string }
+  | { type: "array"; description?: string; items: Schema }
+  | {
+      type: "object";
+      description?: string;
+      properties: Record<string, Schema>;
+      required?: readonly string[];
+    };
+
+export type Generated<S extends Schema> = S extends { type: "string"; enum: readonly (infer Choice)[] }
+  ? Choice
+  : S extends { type: "string" }
+    ? string
+    : S extends { type: "number" | "integer" }
+      ? number
+      : S extends { type: "boolean" }
+        ? boolean
+        : S extends { type: "array"; items: infer Item extends Schema }
+          ? Generated<Item>[]
+          : S extends { type: "object"; properties: infer Properties extends Record<string, Schema> }
+            ? { [Key in keyof Properties as Key extends RequiredKeys<S> ? Key : never]: Generated<Properties[Key]> } & {
+                [Key in keyof Properties as Key extends RequiredKeys<S> ? never : Key]?: Generated<Properties[Key]>;
+              }
+            : never;
+
+type RequiredKeys<S> = S extends { required: readonly (infer Key)[] } ? Key : never;
+
+export type GenerateRequest<S extends Schema> = {
+  prompt: string;
+  instructions?: string;
+  schema: S;
+};
 
 export type Context = {
   app: App;
   insert(text: string): void;
   press(key: string): void;
   notify(text: string): void;
+  generate<const S extends Schema>(request: GenerateRequest<S>): Promise<Generated<S>>;
 };
+
+export type CommandOptions = { at?: "start" | "end" };
 
 export type BeforeCleanupEvent = { prompt: string };
 export type BeforeCleanupResult = { prompt: string } | void;
 export type BeforeInsertEvent = { text: string; raw: string };
-export type BeforeInsertResult = { text: string } | { handled: true } | void;
+export type BeforeInsertResult = { text: string } | void;
 export type CommandEvent = { text: string };
 export type RecordingEvent = { path: string; seconds: number };
 export type AfterInsertEvent = { text: string; raw: string };
@@ -48,6 +86,14 @@ export type Action = {
   run(ctx: Context): Awaitable<void>;
 };
 
+export type Activity = {
+  title: string;
+  since?: number;
+  stop?: string;
+};
+
+export type Transcript = { text: string; seconds?: number };
+
 type SettingBase = { title: string; description?: string };
 
 export type Setting =
@@ -63,16 +109,9 @@ export type SettingsValues<Schema extends SettingsSchema> = {
 
 type Awaitable<T> = T | Promise<T>;
 
-export type EventBus = {
-  on<T>(name: string, handler: (data: T) => void): void;
-  emit<T>(name: string, data: T): void;
-};
-
 export type ExtensionAPI = {
   name: string;
-  config: Record<string, string | number | boolean>;
   paths: Paths;
-  events: EventBus;
   on(
     event: "beforeCleanup",
     handler: (
@@ -98,17 +137,20 @@ export type ExtensionAPI = {
   registerCommand(
     phrase: string,
     handler: (event: CommandEvent, ctx: Context) => Awaitable<void>,
+    options?: CommandOptions,
   ): void;
   registerSpeechModel(model: SpeechModel): void;
   registerCleanupModel(model: CleanupModel): void;
   registerCleanupStep(step: CleanupStep): void;
   registerAction(action: Action): void;
   settings<Schema extends SettingsSchema>(schema: Schema): SettingsValues<Schema>;
-  log(message: string): void;
+  showActivity(activity: Activity): void;
+  hideActivity(): void;
+  addTranscript(transcript: Transcript): void;
 };
 
 export type Extension = (voz: ExtensionAPI) => Awaitable<void>;
 
-export const apiVersion: 1;
+export const apiVersion: 2;
 
 export function defineExtension(extension: Extension): Extension;

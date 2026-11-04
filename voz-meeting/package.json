@@ -13,6 +13,12 @@
   "os": ["darwin"],
   "cpu": ["arm64"],
   "voz": { "apiVersion": 1 },
-  "files": ["index.ts", "meeting-rec", "meeting-rec.swift"],
+  "files": ["index.ts", "detection.ts", "detection-config.json", "native-check.ts", "meeting-rec", "meeting-rec.swift"],
+  "scripts": {
+    "build": "swiftc -O -swift-version 5 meeting-rec.swift -o meeting-rec",
+    "prepack": "bun run build",
+    "test": "bun test",
+    "check:native": "bun run native-check.ts"
+  },
   "devDependencies": { "@types/bun": "latest" }
 }
